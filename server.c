@@ -25,7 +25,7 @@ struct Actor
 // Add an actor to the children of an existing actor
 void actor_t_attach(actor_t *parent, actor_t *child)
 {
-    printf("Attaching actor '%s' to '%s'\n", child->name,parent->name);
+  printf("Attaching actor '%s' to '%s'\n", child->name, parent->name);
   if (parent->subActors)
   {
     actor_t *node = parent->subActors;
@@ -54,7 +54,7 @@ void actor_t_attach(actor_t *parent, actor_t *child)
 // Destroy an actor (and its sub actors)
 void actor_t_destroy(actor_t *actor)
 {
-    printf("Destroying actor '%s'\n", actor->name);
+  printf("Destroying actor '%s'\n", actor->name);
   actor->state = 1; // Update this actor's state to destroyed
   // Remove actor from parent
   if (actor->parentActor && actor->nextSubActor)
@@ -138,7 +138,36 @@ void *reciever_client(void *arg)
     free(message);
   }
   // Player has disconnected, close their connection and remove their character, inform other players
+  // Send a message to all of the clients
+  for (int i = 0; i < MAX_USERS; i++)
+  {
+    if (addresses[i] != -1)
+    { // If this user exists
+      if (addresses[i] == *client_actor->address)
+      {
+      }
+      else
+      { // If this user is anyone else (Format in 3rd person)
+        char formattedString[100];
+        sprintf(formattedString, "%s has left.", client_actor->name);
+        int rc = send_message(addresses[i], formattedString);
+        if (rc == -1)
+        {
+          perror("Failed to send message to client");
+          exit(EXIT_FAILURE);
+        }
+      }
+    }
+  }
+
   close(*client_actor->address);
+
+  for (int i = 0; i < MAX_USERS; i++)
+  {
+    if (addresses[i] == *client_actor->address) {
+      addresses[i] = -1;
+    }
+  }
   actor_t_destroy(client_actor);
   free(client_actor);
   return NULL;
