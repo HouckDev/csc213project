@@ -5,9 +5,11 @@
 #include <pthread.h>
 #include "message.h"
 #include "socket.h"
-  int addresses[3];
+
+#define MAX_USERS 3
+int addresses[MAX_USERS];
 // Starter networking code recieved from CSC-213 Networking Exercise
-void *thread(void *arg)
+void *reciever_client(void *arg)
 {
   int client_socket_fd = *(int *)arg;
   while (1)
@@ -20,25 +22,14 @@ void *thread(void *arg)
       exit(EXIT_FAILURE);
     }
 
-    if (strcmp(message, "quit") == 0)
+    if (strcmp(message, ";quit") == 0 || strcmp(message, ";q") == 0)
     {
       free(message);
       break;
     }
 
-    // Captialize the message
-    for (int i = 0; i < strlen(message); i++)
-    {
-      char character = message[i];
-      if (character >= 'a' && character <= 'z')
-      {
-        character = character - 32;
-      }
-      message[i] = character;
-    }
-
     // Send a message to all of the clients
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < MAX_USERS; i++)
     {
       if (addresses[i] != -1)
       {
@@ -53,13 +44,14 @@ void *thread(void *arg)
       }
     }
     // Print the message
-    printf("Client: %s\n", message);
+    printf("%d - %s\n", client_socket_fd, message);
     // Free the message string
     free(message);
   }
   close(client_socket_fd);
   return NULL;
 }
+
 int main()
 {
   // Open a server socket
@@ -79,9 +71,9 @@ int main()
   }
 
   printf("Server listening on port %u\n", port);
-  pthread_t ts[3];
+  pthread_t ts[MAX_USERS];
   int z = 0;
-  for (int i = 0; i < 3; i++){
+  for (int i = 0; i < MAX_USERS; i++){
     addresses[i] = -1;
   }
     // Wait for a client to connect
@@ -96,7 +88,7 @@ int main()
 
       printf("Client connected!\n");
       // Create the thread
-      pthread_create(&ts[z], NULL, thread, &addresses[z]);
+      pthread_create(&ts[z], NULL, reciever_client, &addresses[z]);
       z++;
     }
     // Close sockets
