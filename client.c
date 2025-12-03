@@ -20,6 +20,7 @@ void *client_input(void *arg)
     getline(&line, &len, stdin);
     line[strlen(line) - 1] = 0;
     int rc = send_message(socket_fd, line);
+    printf(">%s\n", line);
     if (rc == -1)
     {
       perror("Failed to send message to server");
@@ -49,7 +50,7 @@ void *client_output(void *arg)
     }
 
     // Print the message
-    printf("Server: %s\n", message);
+    printf("%s\n", message);
 
     // Free the message
     free(message);

@@ -32,14 +32,29 @@ void *reciever_client(void *arg)
     for (int i = 0; i < MAX_USERS; i++)
     {
       if (addresses[i] != -1)
-      {
-        char formattedString[25];
-        sprintf(formattedString, "%d - %s", client_socket_fd,message);
-        int rc = send_message(addresses[i], formattedString);
-        if (rc == -1)
-        {
-          perror("Failed to send message to client");
-          exit(EXIT_FAILURE);
+      { // If this user exists
+        if (addresses[i] == client_socket_fd)
+        { // If this user is the one who submitted the message (Format in 1st person)
+          char formattedString[100];
+          sprintf(formattedString, "You say '%s'", message);
+          int rc = send_message(addresses[i], formattedString);
+          if (rc == -1)
+          {
+            perror("Failed to send message to client");
+            exit(EXIT_FAILURE);
+          }
+        
+        }
+        else
+        { // If this user is anyone else (Format in 3rd person)
+          char formattedString[100];
+          sprintf(formattedString, "%d says '%s'", client_socket_fd, message);
+          int rc = send_message(addresses[i], formattedString);
+          if (rc == -1)
+          {
+            perror("Failed to send message to client");
+            exit(EXIT_FAILURE);
+          }
         }
       }
     }
@@ -73,26 +88,27 @@ int main()
   printf("Server listening on port %u\n", port);
   pthread_t ts[MAX_USERS];
   int z = 0;
-  for (int i = 0; i < MAX_USERS; i++){
+  for (int i = 0; i < MAX_USERS; i++)
+  {
     addresses[i] = -1;
   }
-    // Wait for a client to connect
-    while (1)
+  // Wait for a client to connect
+  while (1)
+  {
+    addresses[z] = server_socket_accept(server_socket_fd);
+    if (addresses[z] == -1)
     {
-      addresses[z] = server_socket_accept(server_socket_fd);
-      if (addresses[z] == -1)
-      {
-        perror("accept failed");
-        exit(EXIT_FAILURE);
-      }
-
-      printf("Client connected!\n");
-      // Create the thread
-      pthread_create(&ts[z], NULL, reciever_client, &addresses[z]);
-      z++;
+      perror("accept failed");
+      exit(EXIT_FAILURE);
     }
-    // Close sockets
-    close(server_socket_fd);
 
-    return 0;
+    printf("Client connected!\n");
+    // Create the thread
+    pthread_create(&ts[z], NULL, reciever_client, &addresses[z]);
+    z++;
   }
+  // Close sockets
+  close(server_socket_fd);
+
+  return 0;
+}
