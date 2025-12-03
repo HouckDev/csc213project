@@ -15,23 +15,59 @@ typedef struct Actor actor_t;
 struct Actor
 {
   char *name;
+  int state;
   actor_t *parentActor;
   actor_t *subActors;
   actor_t *nextSubActor;
-  int* address;
+  int *address;
 };
 
-// Destroy an actor (and its sub actors)
-void actor_t_destroy(actor_t actor)
+// Add an actor to the children of an existing actor
+void actor_t_attach(actor_t *parent, actor_t *child)
 {
-  free(actor.name);
+    printf("Attaching actor '%s' to '%s'\n", child->name,parent->name);
+  if (parent->subActors)
+  {
+    actor_t *node = parent->subActors;
+    if (node->state != 1)
+    {
+      parent->subActors = child;
+      child->parentActor = parent;
+    }
+    else
+    {
+      while (node->nextSubActor && node->nextSubActor->state != 1)
+      {
+        actor_t *node = node->nextSubActor;
+      }
+      node->nextSubActor = child;
+      child->parentActor = parent;
+    }
+  }
+  else
+  {
+    parent->subActors = child;
+    child->parentActor = parent;
+  }
+}
 
-  // Free all sub actors of this
-  actor_t *node = actor.subActors;
+// Destroy an actor (and its sub actors)
+void actor_t_destroy(actor_t *actor)
+{
+    printf("Destroying actor '%s'\n", actor->name);
+  actor->state = 1; // Update this actor's state to destroyed
+  // Remove actor from parent
+  if (actor->parentActor && actor->nextSubActor)
+  {
+    actor_t_attach(actor->parentActor, actor->nextSubActor);
+  }
+
+  // Free all sub actors of this actor
+  actor_t *node = actor->subActors;
   while (node)
   {
     actor_t *next = node->nextSubActor;
-    actor_t_destroy(*node);
+    actor_t_destroy(node);
     free(node);
     node = next;
   }
@@ -41,35 +77,16 @@ void actor_t_destroy(actor_t actor)
 actor_t *actor_t_create(char *name)
 {
   actor_t *actor = malloc(sizeof(actor_t));
+  actor->state = 0;
   actor->name = name;
   return actor;
-}
-
-// Add an actor to the children of an existing actor
-void actor_t_attach(actor_t *parent, actor_t *child)
-{
-  if (parent->subActors)
-  {
-    actor_t *node = parent->subActors;
-    while (node->nextSubActor)
-    {
-      actor_t *node = node->nextSubActor;
-    }
-    node->nextSubActor = child;
-    child->parentActor = parent;
-  }
-  else
-  {
-    parent->subActors = child;
-    child->parentActor = parent;
-  }
 }
 
 actor_t *gameworld;
 
 void *reciever_client(void *arg)
 {
-  actor_t* client_actor = (actor_t *)arg;
+  actor_t *client_actor = (actor_t *)arg;
   while (1)
   {
     // Read a message from the client
@@ -120,7 +137,10 @@ void *reciever_client(void *arg)
     // Free the message string
     free(message);
   }
+  // Player has disconnected, close their connection and remove their character, inform other players
   close(*client_actor->address);
+  actor_t_destroy(client_actor);
+  free(client_actor);
   return NULL;
 }
 
@@ -174,7 +194,7 @@ int main()
   close(server_socket_fd);
 
   // Destroy gameworld
-  actor_t_destroy(*gameworld);
+  actor_t_destroy(gameworld);
   free(gameworld);
   return 0;
 }
