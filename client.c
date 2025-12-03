@@ -8,6 +8,8 @@
 #include "socket.h"
 // Starter networking code recieved from CSC-213 Networking Exercise
 int socket_fd;
+
+// Client input thread, get input lines and submit them to the server
 void *client_input(void *arg)
 {
   while (1)
@@ -31,6 +33,8 @@ void *client_input(void *arg)
   }
   return NULL;
 }
+
+// Server input thread, wait for message, then print all text recieved from server
 void *client_output(void *arg)
 {
 
