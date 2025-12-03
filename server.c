@@ -103,31 +103,71 @@ void *reciever_client(void *arg)
       break;
     }
 
-    // Send a message to all of the clients
-    for (int i = 0; i < MAX_USERS; i++)
+    if (strncmp(message, ";e ", 3) == 0)
     {
-      if (addresses[i] != -1)
-      { // If this user exists
-        if (addresses[i] == *client_actor->address)
-        { // If this user is the one who submitted the message (Format in 1st person)
-          char formattedString[100];
-          sprintf(formattedString, "You say '%s'", message);
-          int rc = send_message(addresses[i], formattedString);
-          if (rc == -1)
-          {
-            perror("Failed to send message to client");
-            exit(EXIT_FAILURE);
+      char* formattedStringB = malloc(sizeof(char)*100);
+      sprintf(formattedStringB, "%s", message);
+      formattedStringB+=3;
+      // Send a message to all of the clients
+      for (int i = 0; i < MAX_USERS; i++)
+      {
+        if (addresses[i] != -1)
+        { // If this user exists
+          if (addresses[i] == *client_actor->address)
+          { // If this user is the one who submitted the message (Format in 1st person)
+            char formattedString[100];
+            sprintf(formattedString, "*%s*", formattedStringB);
+            int rc = send_message(addresses[i], formattedString);
+            if (rc == -1)
+            {
+              perror("Failed to send message to client");
+              exit(EXIT_FAILURE);
+            }
+          }
+          else
+          { // If this user is anyone else (Format in 3rd person)
+            char formattedString[100];
+            sprintf(formattedString, "%s *%s*", client_actor->name, formattedStringB);
+            int rc = send_message(addresses[i], formattedString);
+            if (rc == -1)
+            {
+              perror("Failed to send message to client");
+              exit(EXIT_FAILURE);
+            }
           }
         }
-        else
-        { // If this user is anyone else (Format in 3rd person)
-          char formattedString[100];
-          sprintf(formattedString, "%s says '%s'", client_actor->name, message);
-          int rc = send_message(addresses[i], formattedString);
-          if (rc == -1)
-          {
-            perror("Failed to send message to client");
-            exit(EXIT_FAILURE);
+      }
+      formattedStringB-=3;
+      free(formattedStringB);
+    }
+    else
+    {
+      // Send a message to all of the clients
+      for (int i = 0; i < MAX_USERS; i++)
+      {
+        if (addresses[i] != -1)
+        { // If this user exists
+          if (addresses[i] == *client_actor->address)
+          { // If this user is the one who submitted the message (Format in 1st person)
+            char formattedString[100];
+            sprintf(formattedString, "'%s'", message);
+            int rc = send_message(addresses[i], formattedString);
+            if (rc == -1)
+            {
+              perror("Failed to send message to client");
+              exit(EXIT_FAILURE);
+            }
+          }
+          else
+          { // If this user is anyone else (Format in 3rd person)
+            char formattedString[100];
+            sprintf(formattedString, "%s says '%s'", client_actor->name, message);
+            int rc = send_message(addresses[i], formattedString);
+            if (rc == -1)
+            {
+              perror("Failed to send message to client");
+              exit(EXIT_FAILURE);
+            }
           }
         }
       }
@@ -164,7 +204,8 @@ void *reciever_client(void *arg)
 
   for (int i = 0; i < MAX_USERS; i++)
   {
-    if (addresses[i] == *client_actor->address) {
+    if (addresses[i] == *client_actor->address)
+    {
       addresses[i] = -1;
     }
   }
