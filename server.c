@@ -209,10 +209,19 @@ void executeCommand(actor_t *owner_actor, char* message) {
         sprintf(formattedString, "%s examines %s", owner_actor->name, currentActor->name);
         broadcast_local(formattedString, owner_actor);
 
+        // Print out main objects description
         broadcast_private(currentActor->description, owner_actor);
-        executeCommand(owner_actor,";l");
-        sprintf(formattedString, "%s enters through %s", owner_actor->name, currentActor->name);
-        broadcast_local(formattedString, owner_actor);
+        // Print out sub objects
+
+        actor_t *subActor = currentActor->subActors;
+        while (subActor)
+        {
+          if (subActor != owner_actor) {
+        sprintf(formattedString, "You see a '%s'", subActor->name);
+              broadcast_private(formattedString, owner_actor);
+          }
+          subActor = subActor->nextSubActor;
+        }
       }
       else
       {
@@ -237,6 +246,7 @@ void executeCommand(actor_t *owner_actor, char* message) {
         actor_t_detach(owner_actor);
         actor_t_attach(currentActor->portal, owner_actor);
         broadcast_private("You enter the door.", owner_actor);
+        executeCommand(owner_actor,";l");
 
         sprintf(formattedString, "%s enters through %s", owner_actor->name, currentActor->name);
         broadcast_local(formattedString, owner_actor);
@@ -320,16 +330,19 @@ int main()
   // Initialize the gameworld
   gameworld = actor_t_create("World");
   actor_t *room1 = actor_t_create("Room 1");
-  room1->description = "Test";
+  room1->description = "You stand in a large room";
   actor_t_attach(gameworld, room1);
   actor_t *room2 = actor_t_create("Room 2");
+  room2->description = "You stand in a small room";
   actor_t_attach(gameworld, room2);
 
-  actor_t *door1 = actor_t_create("Door 2");
+  actor_t *door1 = actor_t_create("Door");
   door1->portal = room2;
+  door1->description = "A door leading to a small room";
   actor_t_attach(room1, door1);
-  actor_t *door2 = actor_t_create("Door 1");
+  actor_t *door2 = actor_t_create("Door");
   door2->portal = room1;
+  door2->description = "A door leading to a large room";
   actor_t_attach(room2, door2);
 
   // Open a server socket
