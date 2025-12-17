@@ -186,6 +186,8 @@ actor_t* actor_find(char *name, actor_t* parent) {
   return NULL;
 
 }
+
+// Execute a game command via string
 void executeCommand(actor_t *owner_actor, char* message) {
   if ((strncmp(message, ";l ", 3) == 0) || (strcmp(message, ";l") == 0))
     { // Command move
