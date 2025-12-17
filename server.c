@@ -20,6 +20,7 @@ struct Actor
   actor_t *subActors;
   actor_t *nextSubActor;
   int *address;
+  actor_t *portal;
 };
 
 // Add an actor to the children of an existing actor
@@ -29,7 +30,7 @@ void actor_t_attach(actor_t *parent, actor_t *child)
   if (parent->subActors)
   {
     actor_t *node = parent->subActors;
-    if (node->state != 1)
+    if (node->state == 1)
     {
       parent->subActors = child;
       child->parentActor = parent;
@@ -38,7 +39,7 @@ void actor_t_attach(actor_t *parent, actor_t *child)
     {
       while (node->nextSubActor && node->nextSubActor->state != 1)
       {
-        actor_t *node = node->nextSubActor;
+        node = node->nextSubActor;
       }
       node->nextSubActor = child;
       child->parentActor = parent;
@@ -73,17 +74,117 @@ void actor_t_destroy(actor_t *actor)
   }
 }
 
+// Detach an actor (But dont destroy it)
+void actor_t_detach(actor_t *actor)
+{
+  printf("Detaching actor '%s'\n", actor->name);
+  actor->state = 1; // Update this actor's state to destroyed
+  // Remove actor from parent
+  if (actor->parentActor && actor->nextSubActor)
+  {
+    actor_t_attach(actor->parentActor, actor->nextSubActor);
+  }
+
+  if (actor->parentActor->subActors == actor)
+  {
+    actor->parentActor->subActors = NULL;
+  }
+  actor_t *node = actor->parentActor->subActors;
+  while (node->nextSubActor && node->nextSubActor != actor)
+  {
+    node = node->nextSubActor;
+  }
+  node->nextSubActor = NULL;
+
+  actor->nextSubActor = NULL;
+  actor->state = 0; // Update this actor's state to normal
+  actor->parentActor = NULL;
+}
+
 // Allocate space and populate the fields of a new actor
 actor_t *actor_t_create(char *name)
 {
   actor_t *actor = malloc(sizeof(actor_t));
   actor->state = 0;
   actor->name = name;
+  actor->address = NULL;
   return actor;
 }
 
 actor_t *gameworld;
 
+// Broadcast message to the player of the speaker (ownerActor)
+void broadcast_private(char *message, actor_t *ownerActor)
+{
+  int rc = send_message(*ownerActor->address, message);
+  if (rc == -1)
+  {
+    perror("Failed to send message to client");
+    exit(EXIT_FAILURE);
+  }
+  return;
+}
+
+// Broadcast message to all players in same room as the speaker (ownerActor)
+void broadcast_local(char *message, actor_t *ownerActor)
+{
+  printf("Broadcasting message '%s' to area %s\n", message, ownerActor->parentActor->name);
+  actor_t *currentActor = ownerActor->parentActor->subActors;
+  while (currentActor)
+  {
+    if (currentActor->address && *currentActor->address)
+    { // If this user exists
+      if (ownerActor != currentActor)
+      { // If this user is anyone else
+        int rc = send_message(*currentActor->address, message);
+        if (rc == -1)
+        {
+          perror("Failed to send message to client");
+          exit(EXIT_FAILURE);
+        }
+      }
+    }
+    currentActor = currentActor->nextSubActor;
+  }
+  return;
+}
+
+// Broadcast a message to all players regardless of location
+void broadcast_global(char *message)
+{
+  for (int i = 0; i < MAX_USERS; i++)
+  {
+    if (addresses[i] != -1)
+    { // If this user exists
+      int rc = send_message(addresses[i], message);
+      if (rc == -1)
+      {
+        perror("Failed to send message to client");
+        exit(EXIT_FAILURE);
+      }
+    }
+  }
+}
+
+// Get actor by name 
+actor_t* actor_find(char *name, actor_t* parent) {
+  printf("Searching for actor '%s'\n", name);
+  actor_t *currentActor = parent->subActors;
+  while (currentActor)
+  {
+    // Check this actor
+    printf("Checking '%s'\n", currentActor->name);
+    if (strcmp(name, currentActor->name) == 0)
+    {
+      printf("Found.\n");
+      return currentActor;
+    }
+
+    currentActor = currentActor->nextSubActor;
+  }
+  return NULL;
+
+}
 void *reciever_client(void *arg)
 {
   actor_t *client_actor = (actor_t *)arg;
@@ -97,80 +198,61 @@ void *reciever_client(void *arg)
       exit(EXIT_FAILURE);
     }
 
-    if (strcmp(message, ";quit") == 0 || strcmp(message, ";q") == 0)
-    {
+    if (strncmp(message, ";m ", 3) == 0)
+    { // Command move
+
+      char *target = malloc(sizeof(char) * 100);
+      sprintf(target, "%s", message);
+      target += 3;
+
+      // Search for the actor
+      printf("Searching for door '%s'\n", target);
+      actor_t *currentActor = actor_find(target,client_actor->parentActor);
+      if (currentActor)
+      {
+        char formattedString[100];
+        sprintf(formattedString, "%s leaves through %s", client_actor->name, currentActor->name);
+        broadcast_local(formattedString, client_actor);
+
+        actor_t_detach(client_actor);
+        actor_t_attach(currentActor->portal, client_actor);
+        broadcast_private("You enter the door.", client_actor);
+
+        sprintf(formattedString, "%s enters through %s", client_actor->name, currentActor->name);
+        broadcast_local(formattedString, client_actor);
+      }
+      else
+      {
+        broadcast_private("Could not find door.", client_actor);
+      }
+    }
+    else if (strcmp(message, ";quit") == 0 || strcmp(message, ";q") == 0)
+    { // Command quit
       free(message);
       break;
     }
+    else if (strncmp(message, ";e ", 3) == 0)
+    { // Command emote
 
-    if (strncmp(message, ";e ", 3) == 0)
-    {
-      char* formattedStringB = malloc(sizeof(char)*100);
+      char *formattedStringB = malloc(sizeof(char) * 100);
       sprintf(formattedStringB, "%s", message);
-      formattedStringB+=3;
-      // Send a message to all of the clients
-      for (int i = 0; i < MAX_USERS; i++)
-      {
-        if (addresses[i] != -1)
-        { // If this user exists
-          if (addresses[i] == *client_actor->address)
-          { // If this user is the one who submitted the message (Format in 1st person)
-            char formattedString[100];
-            sprintf(formattedString, "*%s*", formattedStringB);
-            int rc = send_message(addresses[i], formattedString);
-            if (rc == -1)
-            {
-              perror("Failed to send message to client");
-              exit(EXIT_FAILURE);
-            }
-          }
-          else
-          { // If this user is anyone else (Format in 3rd person)
-            char formattedString[100];
-            sprintf(formattedString, "%s *%s*", client_actor->name, formattedStringB);
-            int rc = send_message(addresses[i], formattedString);
-            if (rc == -1)
-            {
-              perror("Failed to send message to client");
-              exit(EXIT_FAILURE);
-            }
-          }
-        }
-      }
-      formattedStringB-=3;
+      formattedStringB += 3;
+      char formattedString[100];
+      sprintf(formattedString, "*%s*", formattedStringB);
+      broadcast_private(formattedString, client_actor);
+      sprintf(formattedString, "%s *%s*", client_actor->name, formattedStringB);
+      broadcast_local(formattedString, client_actor);
+      formattedStringB -= 3;
       free(formattedStringB);
     }
     else
-    {
-      // Send a message to all of the clients
-      for (int i = 0; i < MAX_USERS; i++)
-      {
-        if (addresses[i] != -1)
-        { // If this user exists
-          if (addresses[i] == *client_actor->address)
-          { // If this user is the one who submitted the message (Format in 1st person)
-            char formattedString[100];
-            sprintf(formattedString, "'%s'", message);
-            int rc = send_message(addresses[i], formattedString);
-            if (rc == -1)
-            {
-              perror("Failed to send message to client");
-              exit(EXIT_FAILURE);
-            }
-          }
-          else
-          { // If this user is anyone else (Format in 3rd person)
-            char formattedString[100];
-            sprintf(formattedString, "%s says '%s'", client_actor->name, message);
-            int rc = send_message(addresses[i], formattedString);
-            if (rc == -1)
-            {
-              perror("Failed to send message to client");
-              exit(EXIT_FAILURE);
-            }
-          }
-        }
-      }
+    { // Any other case (Speak)
+
+      char formattedString[100];
+      sprintf(formattedString, "'%s'", message);
+      broadcast_private(formattedString, client_actor);
+      sprintf(formattedString, "%s says '%s'", client_actor->name, message);
+      broadcast_local(formattedString, client_actor);
     }
     // Print the message
     printf("%d - %s\n", *client_actor->address, message);
@@ -179,26 +261,9 @@ void *reciever_client(void *arg)
   }
   // Player has disconnected, close their connection and remove their character, inform other players
   // Send a message to all of the clients
-  for (int i = 0; i < MAX_USERS; i++)
-  {
-    if (addresses[i] != -1)
-    { // If this user exists
-      if (addresses[i] == *client_actor->address)
-      {
-      }
-      else
-      { // If this user is anyone else (Format in 3rd person)
-        char formattedString[100];
-        sprintf(formattedString, "%s has left.", client_actor->name);
-        int rc = send_message(addresses[i], formattedString);
-        if (rc == -1)
-        {
-          perror("Failed to send message to client");
-          exit(EXIT_FAILURE);
-        }
-      }
-    }
-  }
+  char formattedString[100];
+  sprintf(formattedString, "%s has left.", client_actor->name);
+  broadcast_global(formattedString);
 
   close(*client_actor->address);
 
@@ -218,6 +283,17 @@ int main()
 {
   // Initialize the gameworld
   gameworld = actor_t_create("World");
+  actor_t *room1 = actor_t_create("Room 1");
+  actor_t_attach(gameworld, room1);
+  actor_t *room2 = actor_t_create("Room 2");
+  actor_t_attach(gameworld, room2);
+
+  actor_t *door1 = actor_t_create("Door 2");
+  door1->portal = room2;
+  actor_t_attach(room1, door1);
+  actor_t *door2 = actor_t_create("Door 1");
+  door2->portal = room1;
+  actor_t_attach(room2, door2);
 
   // Open a server socket
   unsigned short port = 0;
@@ -255,7 +331,7 @@ int main()
     printf("Client connected!\n");
     // Create the thread
     actor_t *player = actor_t_create("Player");
-    actor_t_attach(gameworld, player);
+    actor_t_attach(room1, player);
     player->address = &addresses[z];
     pthread_create(&ts[z], NULL, reciever_client, player);
     z++;
