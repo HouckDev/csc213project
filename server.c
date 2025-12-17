@@ -15,6 +15,7 @@ typedef struct Actor actor_t;
 struct Actor
 {
   char *name;
+  char *description;
   int state;
   actor_t *parentActor;
   actor_t *subActors;
@@ -185,6 +186,88 @@ actor_t* actor_find(char *name, actor_t* parent) {
   return NULL;
 
 }
+void executeCommand(actor_t *owner_actor, char* message) {
+  if ((strncmp(message, ";l ", 3) == 0) || (strcmp(message, ";l") == 0))
+    { // Command move
+
+      char *target = malloc(sizeof(char) * 100);
+      sprintf(target, "%s", message);
+      target += 3;
+      actor_t *currentActor;
+    if (strcmp(target, "") == 0) {
+      currentActor = owner_actor->parentActor;
+    } else {
+      // Search for the actor
+      printf("Searching for object '%s'\n", target);
+      currentActor = actor_find(target,owner_actor->parentActor);
+    }
+      if (currentActor)
+      {
+        char formattedString[100];
+        sprintf(formattedString, "%s examines %s", owner_actor->name, currentActor->name);
+        broadcast_local(formattedString, owner_actor);
+
+        broadcast_private(currentActor->description, owner_actor);
+        executeCommand(owner_actor,";l");
+        sprintf(formattedString, "%s enters through %s", owner_actor->name, currentActor->name);
+        broadcast_local(formattedString, owner_actor);
+      }
+      else
+      {
+        broadcast_private("Could not find object.", owner_actor);
+      }
+    } else if (strncmp(message, ";m ", 3) == 0)
+    { // Command move
+
+      char *target = malloc(sizeof(char) * 100);
+      sprintf(target, "%s", message);
+      target += 3;
+
+      // Search for the actor
+      printf("Searching for door '%s'\n", target);
+      actor_t *currentActor = actor_find(target,owner_actor->parentActor);
+      if (currentActor)
+      {
+        char formattedString[100];
+        sprintf(formattedString, "%s leaves through %s", owner_actor->name, currentActor->name);
+        broadcast_local(formattedString, owner_actor);
+
+        actor_t_detach(owner_actor);
+        actor_t_attach(currentActor->portal, owner_actor);
+        broadcast_private("You enter the door.", owner_actor);
+
+        sprintf(formattedString, "%s enters through %s", owner_actor->name, currentActor->name);
+        broadcast_local(formattedString, owner_actor);
+      }
+      else
+      {
+        broadcast_private("Could not find door.", owner_actor);
+      }
+    }
+    else if (strncmp(message, ";e ", 3) == 0)
+    { // Command emote
+
+      char *formattedStringB = malloc(sizeof(char) * 100);
+      sprintf(formattedStringB, "%s", message);
+      formattedStringB += 3;
+      char formattedString[100];
+      sprintf(formattedString, "*%s*", formattedStringB);
+      broadcast_private(formattedString, owner_actor);
+      sprintf(formattedString, "%s *%s*", owner_actor->name, formattedStringB);
+      broadcast_local(formattedString, owner_actor);
+      formattedStringB -= 3;
+      free(formattedStringB);
+    }
+    else
+    { // Any other case (Speak)
+
+      char formattedString[100];
+      sprintf(formattedString, "'%s'", message);
+      broadcast_private(formattedString, owner_actor);
+      sprintf(formattedString, "%s says '%s'", owner_actor->name, message);
+      broadcast_local(formattedString, owner_actor);
+    }
+}
 void *reciever_client(void *arg)
 {
   actor_t *client_actor = (actor_t *)arg;
@@ -197,63 +280,14 @@ void *reciever_client(void *arg)
       perror("Failed to read message from client");
       exit(EXIT_FAILURE);
     }
-
-    if (strncmp(message, ";m ", 3) == 0)
-    { // Command move
-
-      char *target = malloc(sizeof(char) * 100);
-      sprintf(target, "%s", message);
-      target += 3;
-
-      // Search for the actor
-      printf("Searching for door '%s'\n", target);
-      actor_t *currentActor = actor_find(target,client_actor->parentActor);
-      if (currentActor)
-      {
-        char formattedString[100];
-        sprintf(formattedString, "%s leaves through %s", client_actor->name, currentActor->name);
-        broadcast_local(formattedString, client_actor);
-
-        actor_t_detach(client_actor);
-        actor_t_attach(currentActor->portal, client_actor);
-        broadcast_private("You enter the door.", client_actor);
-
-        sprintf(formattedString, "%s enters through %s", client_actor->name, currentActor->name);
-        broadcast_local(formattedString, client_actor);
-      }
-      else
-      {
-        broadcast_private("Could not find door.", client_actor);
-      }
-    }
-    else if (strcmp(message, ";quit") == 0 || strcmp(message, ";q") == 0)
+    if (strcmp(message, ";quit") == 0 || strcmp(message, ";q") == 0)
     { // Command quit
       free(message);
       break;
     }
-    else if (strncmp(message, ";e ", 3) == 0)
-    { // Command emote
+    executeCommand(client_actor,message);
 
-      char *formattedStringB = malloc(sizeof(char) * 100);
-      sprintf(formattedStringB, "%s", message);
-      formattedStringB += 3;
-      char formattedString[100];
-      sprintf(formattedString, "*%s*", formattedStringB);
-      broadcast_private(formattedString, client_actor);
-      sprintf(formattedString, "%s *%s*", client_actor->name, formattedStringB);
-      broadcast_local(formattedString, client_actor);
-      formattedStringB -= 3;
-      free(formattedStringB);
-    }
-    else
-    { // Any other case (Speak)
-
-      char formattedString[100];
-      sprintf(formattedString, "'%s'", message);
-      broadcast_private(formattedString, client_actor);
-      sprintf(formattedString, "%s says '%s'", client_actor->name, message);
-      broadcast_local(formattedString, client_actor);
-    }
+    
     // Print the message
     printf("%d - %s\n", *client_actor->address, message);
     // Free the message string
@@ -284,6 +318,7 @@ int main()
   // Initialize the gameworld
   gameworld = actor_t_create("World");
   actor_t *room1 = actor_t_create("Room 1");
+  room1->description = "Test";
   actor_t_attach(gameworld, room1);
   actor_t *room2 = actor_t_create("Room 2");
   actor_t_attach(gameworld, room2);

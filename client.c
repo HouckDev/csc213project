@@ -84,7 +84,8 @@ int main(int argc, char **argv)
   printf("';' to to issue commands\n");
   printf("'q'/'quit' to disconnect\n");
   printf("'e' to emote\n");
-  printf("'m'/'move' to move/enter\n");
+  printf("'m' to move/enter\n");
+  printf("'l' to examine\n");
   // Close socket
   pthread_join(input_thread,NULL);
   pthread_join(output_thread,NULL);
