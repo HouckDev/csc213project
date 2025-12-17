@@ -24,6 +24,9 @@ struct Actor
   actor_t *portal;
 };
 
+void sleep_ms(int ms) {
+  usleep(ms * 1000);
+}
 // Add an actor to the children of an existing actor
 void actor_t_attach(actor_t *parent, actor_t *child)
 {
@@ -213,6 +216,7 @@ void executeCommand(actor_t *owner_actor, char* message) {
         broadcast_private(currentActor->description, owner_actor);
         // Print out sub objects
 
+        sleep_ms(500);
         actor_t *subActor = currentActor->subActors;
         while (subActor)
         {
@@ -221,6 +225,7 @@ void executeCommand(actor_t *owner_actor, char* message) {
               broadcast_private(formattedString, owner_actor);
           }
           subActor = subActor->nextSubActor;
+        sleep_ms(500);
         }
       }
       else
@@ -246,7 +251,8 @@ void executeCommand(actor_t *owner_actor, char* message) {
         actor_t_detach(owner_actor);
         actor_t_attach(currentActor->portal, owner_actor);
         broadcast_private("You enter the door.", owner_actor);
-        executeCommand(owner_actor,";l");
+        sleep_ms(500);
+        executeCommand(owner_actor,";l"); // Execute the look command for convienence.
 
         sprintf(formattedString, "%s enters through %s", owner_actor->name, currentActor->name);
         broadcast_local(formattedString, owner_actor);
