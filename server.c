@@ -14,15 +14,36 @@ int addresses[MAX_USERS];
 typedef struct Actor actor_t;
 struct Actor
 {
+  char *class;
   char *name;
   char *description;
   int state;
+  void *data;
   actor_t *parentActor;
   actor_t *subActors;
   actor_t *nextSubActor;
-  int *address;
+};
+
+// Class Data
+typedef struct actorData_door actorData_door_t;
+struct actorData_door {
   actor_t *portal;
 };
+actorData_door_t *actorData_door_create(actor_t *portal) {
+  actorData_door_t *data = malloc(sizeof(actorData_door_t));
+  data->portal = portal;
+  return data;
+}
+
+typedef struct actorData_player actorData_player_t;
+struct actorData_player {
+  int *address;
+};
+actorData_player_t *actorData_player_create(int *address) {
+  actorData_player_t *data = malloc(sizeof(actorData_player_t));
+  data->address = address;
+  return data;
+}
 
 void sleep_ms(int ms) {
   usleep(ms * 1000);
@@ -76,6 +97,7 @@ void actor_t_destroy(actor_t *actor)
     free(node);
     node = next;
   }
+  free(actor->data);
 }
 
 // Detach an actor (But dont destroy it)
@@ -106,12 +128,13 @@ void actor_t_detach(actor_t *actor)
 }
 
 // Allocate space and populate the fields of a new actor
-actor_t *actor_t_create(char *name)
+actor_t *actor_t_create(char *class,char *name)
 {
   actor_t *actor = malloc(sizeof(actor_t));
+  actor->class = name;
   actor->state = 0;
   actor->name = name;
-  actor->address = NULL;
+  actor->data = NULL;
   return actor;
 }
 
@@ -120,7 +143,7 @@ actor_t *gameworld;
 // Broadcast message to the player of the speaker (ownerActor)
 void broadcast_private(char *message, actor_t *ownerActor)
 {
-  int rc = send_message(*ownerActor->address, message);
+  int rc = send_message(*((actorData_player_t*)ownerActor->data)->address, message);
   if (rc == -1)
   {
     perror("Failed to send message to client");
@@ -136,11 +159,11 @@ void broadcast_local(char *message, actor_t *ownerActor)
   actor_t *currentActor = ownerActor->parentActor->subActors;
   while (currentActor)
   {
-    if (currentActor->address && *currentActor->address)
+    if (strcmp(currentActor->class,"Player") == 0 && *((actorData_player_t*)currentActor->data)->address)
     { // If this user exists
       if (ownerActor != currentActor)
       { // If this user is anyone else
-        int rc = send_message(*currentActor->address, message);
+        int rc = send_message(*((actorData_player_t*)currentActor->data)->address, message);
         if (rc == -1)
         {
           perror("Failed to send message to client");
@@ -242,14 +265,14 @@ void executeCommand(actor_t *owner_actor, char* message) {
       // Search for the actor
       printf("Searching for door '%s'\n", target);
       actor_t *currentActor = actor_find(target,owner_actor->parentActor);
-      if (currentActor)
+      if (currentActor && strcmp(currentActor->class,"Door") == 0)
       {
         char formattedString[100];
         sprintf(formattedString, "%s leaves through %s", owner_actor->name, currentActor->name);
         broadcast_local(formattedString, owner_actor);
 
         actor_t_detach(owner_actor);
-        actor_t_attach(currentActor->portal, owner_actor);
+        actor_t_attach(((actorData_door_t*)currentActor->data)->portal, owner_actor);
         broadcast_private("You enter the door.", owner_actor);
         sleep_ms(500);
         executeCommand(owner_actor,";l"); // Execute the look command for convienence.
@@ -292,7 +315,7 @@ void *reciever_client(void *arg)
   while (1)
   {
     // Read a message from the client
-    char *message = receive_message(*client_actor->address);
+    char *message = receive_message(*((actorData_player_t*)client_actor->data)->address);
     if (message == NULL)
     {
       perror("Failed to read message from client");
@@ -307,7 +330,7 @@ void *reciever_client(void *arg)
 
     
     // Print the message
-    printf("%d - %s\n", *client_actor->address, message);
+    printf("%d - %s\n", *((actorData_player_t*)client_actor->data)->address, message);
     // Free the message string
     free(message);
   }
@@ -317,11 +340,11 @@ void *reciever_client(void *arg)
   sprintf(formattedString, "%s has left.", client_actor->name);
   broadcast_global(formattedString);
 
-  close(*client_actor->address);
+  close(*((actorData_player_t*)client_actor->data)->address);
 
   for (int i = 0; i < MAX_USERS; i++)
   {
-    if (addresses[i] == *client_actor->address)
+    if (addresses[i] == *((actorData_player_t*)client_actor->data)->address)
     {
       addresses[i] = -1;
     }
@@ -334,21 +357,23 @@ void *reciever_client(void *arg)
 int main()
 {
   // Initialize the gameworld
-  gameworld = actor_t_create("World");
-  actor_t *room1 = actor_t_create("Room 1");
-  room1->description = "You stand in a large room";
+  gameworld = actor_t_create("World","World");
+  actor_t *room1 = actor_t_create("Room","Room 1");
+  room1->description = "You stand in a large room.";
   actor_t_attach(gameworld, room1);
-  actor_t *room2 = actor_t_create("Room 2");
-  room2->description = "You stand in a small room";
+  actor_t *room2 = actor_t_create("Room","Room 2");
+  room2->description = "You stand in a small room.";
   actor_t_attach(gameworld, room2);
 
-  actor_t *door1 = actor_t_create("Door");
-  door1->portal = room2;
-  door1->description = "A door leading to a small room";
+  // Populate the gameworld
+  actor_t *door1 = actor_t_create("Door","Door");
+  door1->data = actorData_door_create(room2);
+  door1->description = "A door leading to a small room.";
   actor_t_attach(room1, door1);
-  actor_t *door2 = actor_t_create("Door");
-  door2->portal = room1;
-  door2->description = "A door leading to a large room";
+
+  actor_t *door2 = actor_t_create("Door","Door");
+  door2->data = actorData_door_create(room1);
+  door2->description = "A door leading to a large room.";
   actor_t_attach(room2, door2);
 
   // Open a server socket
@@ -386,9 +411,9 @@ int main()
 
     printf("Client connected!\n");
     // Create the thread
-    actor_t *player = actor_t_create("Player");
+    actor_t *player = actor_t_create("Player","Player");
+    player->data = actorData_player_create(&addresses[z]);
     actor_t_attach(room1, player);
-    player->address = &addresses[z];
     pthread_create(&ts[z], NULL, reciever_client, player);
     z++;
   }
