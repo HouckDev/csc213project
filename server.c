@@ -446,7 +446,7 @@ int main()
   // Door 1
   actor_t *door1 = actor_t_create("Door", "Door");
   door1->data = actorData_door_create(room2, "Key");
-  door1->description = "A door leading to a small room.";
+  door1->description = "A door leading to a small room. Theres an ornate lock on it's handle.";
   actor_t_attach(room1, door1);
 
   // Key
