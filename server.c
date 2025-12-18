@@ -358,19 +358,30 @@ int main()
 {
   // Initialize the gameworld
   gameworld = actor_t_create("World","World");
+
+  // Room 1
   actor_t *room1 = actor_t_create("Room","Room 1");
   room1->description = "You stand in a large room.";
   actor_t_attach(gameworld, room1);
+
+  // Room 2
   actor_t *room2 = actor_t_create("Room","Room 2");
   room2->description = "You stand in a small room.";
   actor_t_attach(gameworld, room2);
 
   // Populate the gameworld
+  // Door 1
   actor_t *door1 = actor_t_create("Door","Door");
   door1->data = actorData_door_create(room2);
   door1->description = "A door leading to a small room.";
   actor_t_attach(room1, door1);
+  
+  // Key
+  actor_t *key1 = actor_t_create("Item","Key");
+  key1->description = "An ornate key.";
+  actor_t_attach(room1, key1);
 
+  // Door 2
   actor_t *door2 = actor_t_create("Door","Door");
   door2->data = actorData_door_create(room1);
   door2->description = "A door leading to a large room.";
