@@ -131,7 +131,7 @@ void actor_t_detach(actor_t *actor)
 actor_t *actor_t_create(char *class,char *name)
 {
   actor_t *actor = malloc(sizeof(actor_t));
-  actor->class = name;
+  actor->class = class;
   actor->state = 0;
   actor->name = name;
   actor->data = NULL;
@@ -143,6 +143,7 @@ actor_t *gameworld;
 // Broadcast message to the player of the speaker (ownerActor)
 void broadcast_private(char *message, actor_t *ownerActor)
 {
+  printf("Broadcasting message '%s' to player %d\n", message, *((actorData_player_t*)ownerActor->data)->address);
   int rc = send_message(*((actorData_player_t*)ownerActor->data)->address, message);
   if (rc == -1)
   {
@@ -244,7 +245,7 @@ void executeCommand(actor_t *owner_actor, char* message) {
         while (subActor)
         {
           if (subActor != owner_actor) {
-        sprintf(formattedString, "You see a '%s'", subActor->name);
+              sprintf(formattedString, "You see a '%s'", subActor->name);
               broadcast_private(formattedString, owner_actor);
           }
           subActor = subActor->nextSubActor;
@@ -283,6 +284,32 @@ void executeCommand(actor_t *owner_actor, char* message) {
       else
       {
         broadcast_private("Could not find door.", owner_actor);
+      }
+    
+    } else if (strncmp(message, ";p ", 3) == 0)
+    { // Command pickup
+
+      char *target = malloc(sizeof(char) * 100);
+      sprintf(target, "%s", message);
+      target += 3;
+
+      // Search for the actor
+      printf("Searching for item '%s'\n", target);
+      actor_t *currentActor = actor_find(target,owner_actor->parentActor);
+      if (currentActor && strcmp(currentActor->class,"Item") == 0)
+      {
+        char formattedString[100];
+        sprintf(formattedString, "%s picks up %s", owner_actor->name, currentActor->name);
+        broadcast_local(formattedString, owner_actor);
+
+        actor_t_detach(currentActor);
+        actor_t_attach(owner_actor, currentActor);
+        sprintf(formattedString, "You pick up the %s", currentActor->name);
+        broadcast_private(formattedString, owner_actor);
+      }
+      else
+      {
+        broadcast_private("Could not find item.", owner_actor);
       }
     }
     else if (strncmp(message, ";e ", 3) == 0)
@@ -424,6 +451,7 @@ int main()
     // Create the thread
     actor_t *player = actor_t_create("Player","Player");
     player->data = actorData_player_create(&addresses[z]);
+    player->description = "An adventurer.";
     actor_t_attach(room1, player);
     pthread_create(&ts[z], NULL, reciever_client, player);
     z++;

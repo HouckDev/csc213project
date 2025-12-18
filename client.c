@@ -86,6 +86,7 @@ int main(int argc, char **argv)
   printf("'e [text]' to emote\n");
   printf("'m [object]' to move/enter\n");
   printf("'l [object]' to examine\n");
+  printf("'p [object]' to pickup\n");
   // Close socket
   pthread_join(input_thread,NULL);
   pthread_join(output_thread,NULL);
