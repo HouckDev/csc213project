@@ -26,26 +26,43 @@ struct Actor
 
 // Class Data
 typedef struct actorData_door actorData_door_t;
-struct actorData_door {
+struct actorData_door
+{
   actor_t *portal;
+  char *lock;
+  int locked;
 };
-actorData_door_t *actorData_door_create(actor_t *portal) {
+actorData_door_t *actorData_door_create(actor_t *portal, char *lock)
+{
   actorData_door_t *data = malloc(sizeof(actorData_door_t));
   data->portal = portal;
+  // Setup the door's lock
+  data->lock = lock;
+  if (lock)
+  {
+    data->locked = 1;
+  }
+  else
+  {
+    data->locked = 0;
+  }
   return data;
 }
 
 typedef struct actorData_player actorData_player_t;
-struct actorData_player {
+struct actorData_player
+{
   int *address;
 };
-actorData_player_t *actorData_player_create(int *address) {
+actorData_player_t *actorData_player_create(int *address)
+{
   actorData_player_t *data = malloc(sizeof(actorData_player_t));
   data->address = address;
   return data;
 }
 
-void sleep_ms(int ms) {
+void sleep_ms(int ms)
+{
   usleep(ms * 1000);
 }
 // Add an actor to the children of an existing actor
@@ -128,7 +145,7 @@ void actor_t_detach(actor_t *actor)
 }
 
 // Allocate space and populate the fields of a new actor
-actor_t *actor_t_create(char *class,char *name)
+actor_t *actor_t_create(char *class, char *name)
 {
   actor_t *actor = malloc(sizeof(actor_t));
   actor->class = class;
@@ -143,8 +160,8 @@ actor_t *gameworld;
 // Broadcast message to the player of the speaker (ownerActor)
 void broadcast_private(char *message, actor_t *ownerActor)
 {
-  printf("Broadcasting message '%s' to player %d\n", message, *((actorData_player_t*)ownerActor->data)->address);
-  int rc = send_message(*((actorData_player_t*)ownerActor->data)->address, message);
+  printf("Broadcasting message '%s' to player %d\n", message, *((actorData_player_t *)ownerActor->data)->address);
+  int rc = send_message(*((actorData_player_t *)ownerActor->data)->address, message);
   if (rc == -1)
   {
     perror("Failed to send message to client");
@@ -160,11 +177,11 @@ void broadcast_local(char *message, actor_t *ownerActor)
   actor_t *currentActor = ownerActor->parentActor->subActors;
   while (currentActor)
   {
-    if (strcmp(currentActor->class,"Player") == 0 && *((actorData_player_t*)currentActor->data)->address)
+    if (strcmp(currentActor->class, "Player") == 0 && *((actorData_player_t *)currentActor->data)->address)
     { // If this user exists
       if (ownerActor != currentActor)
       { // If this user is anyone else
-        int rc = send_message(*((actorData_player_t*)currentActor->data)->address, message);
+        int rc = send_message(*((actorData_player_t *)currentActor->data)->address, message);
         if (rc == -1)
         {
           perror("Failed to send message to client");
@@ -194,8 +211,9 @@ void broadcast_global(char *message)
   }
 }
 
-// Get actor by name 
-actor_t* actor_find(char *name, actor_t* parent) {
+// Get actor by name
+actor_t *actor_find(char *name, actor_t *parent)
+{
   printf("Searching for actor '%s'\n", name);
   actor_t *currentActor = parent->subActors;
   while (currentActor)
@@ -211,130 +229,159 @@ actor_t* actor_find(char *name, actor_t* parent) {
     currentActor = currentActor->nextSubActor;
   }
   return NULL;
-
 }
 
 // Execute a game command via string
-void executeCommand(actor_t *owner_actor, char* message) {
+void executeCommand(actor_t *owner_actor, char *message)
+{
   if ((strncmp(message, ";l ", 3) == 0) || (strcmp(message, ";l") == 0))
-    { // Command move
+  { // Command move
 
-      char *target = malloc(sizeof(char) * 100);
-      sprintf(target, "%s", message);
-      target += 3;
-      actor_t *currentActor;
-    if (strcmp(target, "") == 0) {
+    char *target = malloc(sizeof(char) * 100);
+    sprintf(target, "%s", message);
+    target += 3;
+    actor_t *currentActor;
+    if (strcmp(target, "") == 0)
+    {
       currentActor = owner_actor->parentActor;
-    } else {
+    }
+    else
+    {
       // Search for the actor
       printf("Searching for object '%s'\n", target);
-      currentActor = actor_find(target,owner_actor->parentActor);
+      currentActor = actor_find(target, owner_actor->parentActor);
     }
-      if (currentActor)
+    if (currentActor)
+    {
+      char formattedString[100];
+      sprintf(formattedString, "%s examines %s", owner_actor->name, currentActor->name);
+      broadcast_local(formattedString, owner_actor);
+
+      // Print out main objects description
+      broadcast_private(currentActor->description, owner_actor);
+      // Print out sub objects
+
+      sleep_ms(500);
+      actor_t *subActor = currentActor->subActors;
+      while (subActor)
       {
-        char formattedString[100];
-        sprintf(formattedString, "%s examines %s", owner_actor->name, currentActor->name);
-        broadcast_local(formattedString, owner_actor);
-
-        // Print out main objects description
-        broadcast_private(currentActor->description, owner_actor);
-        // Print out sub objects
-
-        sleep_ms(500);
-        actor_t *subActor = currentActor->subActors;
-        while (subActor)
+        if (subActor != owner_actor)
         {
-          if (subActor != owner_actor) {
-              sprintf(formattedString, "You see a '%s'", subActor->name);
-              broadcast_private(formattedString, owner_actor);
-          }
-          subActor = subActor->nextSubActor;
+          sprintf(formattedString, "You see a '%s'", subActor->name);
+          broadcast_private(formattedString, owner_actor);
+        }
+        subActor = subActor->nextSubActor;
         sleep_ms(500);
+      }
+    }
+    else
+    {
+      broadcast_private("Could not find object.", owner_actor);
+    }
+  }
+  else if (strncmp(message, ";m ", 3) == 0)
+  { // Command move
+
+    char *target = malloc(sizeof(char) * 100);
+    sprintf(target, "%s", message);
+    target += 3;
+
+    // Search for the actor
+    printf("Searching for door '%s'\n", target);
+    actor_t *currentActor = actor_find(target, owner_actor->parentActor);
+    if (currentActor && strcmp(currentActor->class, "Door") == 0)
+    {
+      if (((actorData_door_t *)currentActor->data)->locked == 1)
+      {
+        printf("Searching for key '%s'\n", ((actorData_door_t *)currentActor->data)->lock);
+        actor_t *key = actor_find(((actorData_door_t *)currentActor->data)->lock, owner_actor);
+        if (key)
+        {
+          char formattedString[100];
+          sprintf(formattedString, "%s unlocks the %s with the %s.", owner_actor->name, currentActor->name, key->name);
+          broadcast_local(formattedString, owner_actor);
+          sprintf(formattedString, "The %s unlocks the %s.", key->name, currentActor->name);
+          broadcast_private(formattedString, owner_actor);
+          ((actorData_door_t *)currentActor->data)->locked = 0;
+        }
+        else
+        {
+          char formattedString[100];
+          sprintf(formattedString, "%s tries to open %s, but its locked.", owner_actor->name, currentActor->name);
+          broadcast_local(formattedString, owner_actor);
+          broadcast_private("The way is shut.", owner_actor);
         }
       }
       else
-      {
-        broadcast_private("Could not find object.", owner_actor);
-      }
-    } else if (strncmp(message, ";m ", 3) == 0)
-    { // Command move
-
-      char *target = malloc(sizeof(char) * 100);
-      sprintf(target, "%s", message);
-      target += 3;
-
-      // Search for the actor
-      printf("Searching for door '%s'\n", target);
-      actor_t *currentActor = actor_find(target,owner_actor->parentActor);
-      if (currentActor && strcmp(currentActor->class,"Door") == 0)
       {
         char formattedString[100];
         sprintf(formattedString, "%s leaves through %s", owner_actor->name, currentActor->name);
         broadcast_local(formattedString, owner_actor);
 
         actor_t_detach(owner_actor);
-        actor_t_attach(((actorData_door_t*)currentActor->data)->portal, owner_actor);
+        actor_t_attach(((actorData_door_t *)currentActor->data)->portal, owner_actor);
         broadcast_private("You enter the door.", owner_actor);
         sleep_ms(500);
-        executeCommand(owner_actor,";l"); // Execute the look command for convienence.
+        executeCommand(owner_actor, ";l"); // Execute the look command for convienence.
 
         sprintf(formattedString, "%s enters through %s", owner_actor->name, currentActor->name);
         broadcast_local(formattedString, owner_actor);
       }
-      else
-      {
-        broadcast_private("Could not find door.", owner_actor);
-      }
-    
-    } else if (strncmp(message, ";p ", 3) == 0)
-    { // Command pickup
-
-      char *target = malloc(sizeof(char) * 100);
-      sprintf(target, "%s", message);
-      target += 3;
-
-      // Search for the actor
-      printf("Searching for item '%s'\n", target);
-      actor_t *currentActor = actor_find(target,owner_actor->parentActor);
-      if (currentActor && strcmp(currentActor->class,"Item") == 0)
-      {
-        char formattedString[100];
-        sprintf(formattedString, "%s picks up %s", owner_actor->name, currentActor->name);
-        broadcast_local(formattedString, owner_actor);
-
-        actor_t_detach(currentActor);
-        actor_t_attach(owner_actor, currentActor);
-        sprintf(formattedString, "You pick up the %s", currentActor->name);
-        broadcast_private(formattedString, owner_actor);
-      }
-      else
-      {
-        broadcast_private("Could not find item.", owner_actor);
-      }
-    }
-    else if (strncmp(message, ";e ", 3) == 0)
-    { // Command emote
-
-      char *formattedStringB = malloc(sizeof(char) * 100);
-      sprintf(formattedStringB, "%s", message);
-      formattedStringB += 3;
-      char formattedString[100];
-      sprintf(formattedString, "*%s*", formattedStringB);
-      broadcast_private(formattedString, owner_actor);
-      sprintf(formattedString, "%s *%s*", owner_actor->name, formattedStringB);
-      broadcast_local(formattedString, owner_actor);
-      formattedStringB -= 3;
-      free(formattedStringB);
     }
     else
-    { // Any other case (Speak)
-
-      char formattedString[100];
-      sprintf(formattedString, "'%s'", message);
-      broadcast_private(formattedString, owner_actor);
-      sprintf(formattedString, "%s says '%s'", owner_actor->name, message);
-      broadcast_local(formattedString, owner_actor);
+    {
+      broadcast_private("Could not find door.", owner_actor);
     }
+  }
+  else if (strncmp(message, ";p ", 3) == 0)
+  { // Command pickup
+
+    char *target = malloc(sizeof(char) * 100);
+    sprintf(target, "%s", message);
+    target += 3;
+
+    // Search for the actor
+    printf("Searching for item '%s'\n", target);
+    actor_t *currentActor = actor_find(target, owner_actor->parentActor);
+    if (currentActor && strcmp(currentActor->class, "Item") == 0)
+    {
+      char formattedString[100];
+      sprintf(formattedString, "%s picks up %s", owner_actor->name, currentActor->name);
+      broadcast_local(formattedString, owner_actor);
+
+      actor_t_detach(currentActor);
+      actor_t_attach(owner_actor, currentActor);
+      sprintf(formattedString, "You pick up the %s", currentActor->name);
+      broadcast_private(formattedString, owner_actor);
+    }
+    else
+    {
+      broadcast_private("Could not find item.", owner_actor);
+    }
+  }
+  else if (strncmp(message, ";e ", 3) == 0)
+  { // Command emote
+
+    char *formattedStringB = malloc(sizeof(char) * 100);
+    sprintf(formattedStringB, "%s", message);
+    formattedStringB += 3;
+    char formattedString[100];
+    sprintf(formattedString, "*%s*", formattedStringB);
+    broadcast_private(formattedString, owner_actor);
+    sprintf(formattedString, "%s *%s*", owner_actor->name, formattedStringB);
+    broadcast_local(formattedString, owner_actor);
+    formattedStringB -= 3;
+    free(formattedStringB);
+  }
+  else
+  { // Any other case (Speak)
+
+    char formattedString[100];
+    sprintf(formattedString, "'%s'", message);
+    broadcast_private(formattedString, owner_actor);
+    sprintf(formattedString, "%s says '%s'", owner_actor->name, message);
+    broadcast_local(formattedString, owner_actor);
+  }
 }
 void *reciever_client(void *arg)
 {
@@ -342,7 +389,7 @@ void *reciever_client(void *arg)
   while (1)
   {
     // Read a message from the client
-    char *message = receive_message(*((actorData_player_t*)client_actor->data)->address);
+    char *message = receive_message(*((actorData_player_t *)client_actor->data)->address);
     if (message == NULL)
     {
       perror("Failed to read message from client");
@@ -353,11 +400,10 @@ void *reciever_client(void *arg)
       free(message);
       break;
     }
-    executeCommand(client_actor,message);
+    executeCommand(client_actor, message);
 
-    
     // Print the message
-    printf("%d - %s\n", *((actorData_player_t*)client_actor->data)->address, message);
+    printf("%d - %s\n", *((actorData_player_t *)client_actor->data)->address, message);
     // Free the message string
     free(message);
   }
@@ -367,11 +413,11 @@ void *reciever_client(void *arg)
   sprintf(formattedString, "%s has left.", client_actor->name);
   broadcast_global(formattedString);
 
-  close(*((actorData_player_t*)client_actor->data)->address);
+  close(*((actorData_player_t *)client_actor->data)->address);
 
   for (int i = 0; i < MAX_USERS; i++)
   {
-    if (addresses[i] == *((actorData_player_t*)client_actor->data)->address)
+    if (addresses[i] == *((actorData_player_t *)client_actor->data)->address)
     {
       addresses[i] = -1;
     }
@@ -384,33 +430,33 @@ void *reciever_client(void *arg)
 int main()
 {
   // Initialize the gameworld
-  gameworld = actor_t_create("World","World");
+  gameworld = actor_t_create("World", "World");
 
   // Room 1
-  actor_t *room1 = actor_t_create("Room","Room 1");
+  actor_t *room1 = actor_t_create("Room", "Room 1");
   room1->description = "You stand in a large room.";
   actor_t_attach(gameworld, room1);
 
   // Room 2
-  actor_t *room2 = actor_t_create("Room","Room 2");
+  actor_t *room2 = actor_t_create("Room", "Room 2");
   room2->description = "You stand in a small room.";
   actor_t_attach(gameworld, room2);
 
   // Populate the gameworld
   // Door 1
-  actor_t *door1 = actor_t_create("Door","Door");
-  door1->data = actorData_door_create(room2);
+  actor_t *door1 = actor_t_create("Door", "Door");
+  door1->data = actorData_door_create(room2, "Key");
   door1->description = "A door leading to a small room.";
   actor_t_attach(room1, door1);
-  
+
   // Key
-  actor_t *key1 = actor_t_create("Item","Key");
+  actor_t *key1 = actor_t_create("Item", "Key");
   key1->description = "An ornate key.";
   actor_t_attach(room1, key1);
 
   // Door 2
-  actor_t *door2 = actor_t_create("Door","Door");
-  door2->data = actorData_door_create(room1);
+  actor_t *door2 = actor_t_create("Door", "Door");
+  door2->data = actorData_door_create(room1, NULL);
   door2->description = "A door leading to a large room.";
   actor_t_attach(room2, door2);
 
@@ -449,7 +495,7 @@ int main()
 
     printf("Client connected!\n");
     // Create the thread
-    actor_t *player = actor_t_create("Player","Player");
+    actor_t *player = actor_t_create("Player", "Player");
     player->data = actorData_player_create(&addresses[z]);
     player->description = "An adventurer.";
     actor_t_attach(room1, player);
