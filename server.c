@@ -8,29 +8,31 @@
 
 #define MAX_USERS 3
 int addresses[MAX_USERS];
-// Starter networking code recieved from CSC-213 Networking Exercise
+// Built off of starter networking code recieved from CSC-213 Networking Exercise
 
 // Actor system
 typedef struct Actor actor_t;
 struct Actor
 {
-  char *class;
-  char *name;
-  char *description;
-  int state;
-  void *data;
-  actor_t *parentActor;
-  actor_t *subActors;
-  actor_t *nextSubActor;
+  char *class; // Class name this actor will belong to
+  char *name; // This actor's specific name
+  char *description; // The test for this actor to display when examined
+  int state; // Actor's state, I.e. can it be attached to or is it in the process of being destroyed.
+  void *data; // Pointer to the data stored in this actor, for class specific behaviour.
+  actor_t *parentActor; // The actor we are attached to
+  actor_t *subActors; // The root of the sub-actors list
+  actor_t *nextSubActor; // The next element of the sub-actors list we are in.
 };
 
-// Class Data
+// Class Data Definitions
+
+// Door Struct
 typedef struct actorData_door actorData_door_t;
 struct actorData_door
 {
-  actor_t *portal;
-  char *lock;
-  int locked;
+  actor_t *portal; // Reference to the actor to transport players to when interacted with.
+  char *lock; // Name of the key object to check players for possession of when unlocking.
+  int locked; // Is this door currently locked?
 };
 actorData_door_t *actorData_door_create(actor_t *portal, char *lock)
 {
@@ -49,10 +51,11 @@ actorData_door_t *actorData_door_create(actor_t *portal, char *lock)
   return data;
 }
 
+// Player Struct
 typedef struct actorData_player actorData_player_t;
 struct actorData_player
 {
-  int *address;
+  int *address; // IP address of the user controlling this actor.
 };
 actorData_player_t *actorData_player_create(int *address)
 {
@@ -65,6 +68,7 @@ void sleep_ms(int ms)
 {
   usleep(ms * 1000);
 }
+
 // Add an actor to the children of an existing actor
 void actor_t_attach(actor_t *parent, actor_t *child)
 {
@@ -431,10 +435,10 @@ int main()
 {
   // Initialize the gameworld
   gameworld = actor_t_create("World", "World");
-
+  // Setup Rooms
   // Room 1
   actor_t *room1 = actor_t_create("Room", "Room 1");
-  room1->description = "You stand in a large room.";
+  room1->description = "You stand in a large room."; 
   actor_t_attach(gameworld, room1);
 
   // Room 2
@@ -442,7 +446,13 @@ int main()
   room2->description = "You stand in a small room.";
   actor_t_attach(gameworld, room2);
 
-  // Populate the gameworld
+  // Populate the rooms
+  // Door 1
+  actor_t *prop1 = actor_t_create("Prop", "Door");
+  prop1->data = actorData_door_create(room2, "Crate");
+  prop1->description = "A crate in the corner of the room.";
+  actor_t_attach(room1, prop1);
+
   // Door 1
   actor_t *door1 = actor_t_create("Door", "Door");
   door1->data = actorData_door_create(room2, "Key");
